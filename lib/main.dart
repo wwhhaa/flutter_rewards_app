@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_tapjoy/flutter_tapjoy.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,10 +33,24 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController controller;
   bool _isLoading = true;
+  final TJPlacement _offerwallPlacement = TJPlacement(name: "Tasks");
+
+  void _connectionResultHandler(TJConnectionResult result) {
+    if (result == TJConnectionResult.connected) {
+      TapJoyPlugin.shared.addPlacement(_offerwallPlacement);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    TapJoyPlugin.shared.connect(
+      androidApiKey: "6cc70fe9-d681-4cda-b98f-70b3ed33fb0f",
+      iOSApiKey: "",
+      debug: false,
+    );
+    TapJoyPlugin.shared.setConnectionResultHandler(_connectionResultHandler);
+
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
@@ -56,6 +71,23 @@ class _WebViewScreenState extends State<WebViewScreen> {
           },
           onWebResourceError: (WebResourceError error) {},
         ),
+      )
+      ..addJavaScriptChannel(
+        'TapjoyBridge',
+        onMessageReceived: (JavaScriptMessage message) {
+          if (message.message == 'showOfferwall') {
+            _offerwallPlacement.requestContent();
+            _offerwallPlacement.setHandler((
+              dynamic placement,
+              dynamic handlerName,
+              dynamic error,
+            ) {
+              if (handlerName == 'contentIsReady') {
+                _offerwallPlacement.showPlacement();
+              }
+            });
+          }
+        },
       )
       // IMPORTANT: Replace this with your computer's IP address for local testing (e.g., http://192.168.1.X:3000)
       // OR use the hosted URL once deployed.

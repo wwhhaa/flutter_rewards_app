@@ -70,6 +70,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_tapjoy:
+    dependency: "direct main"
+    description:
+      name: flutter_tapjoy
+      sha256: a6cec2d75f048584e9c65aa1533af85239f1a1cb6f0f688491e2198fa6a87c81
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
