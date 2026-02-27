@@ -33,11 +33,11 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController controller;
   bool _isLoading = true;
-  final TJPlacement _offerwallPlacement = TJPlacement(name: "Tasks");
+  final TJPlacement _videoPlacement = TJPlacement(name: "RewardedVideo");
 
   void _connectionResultHandler(TJConnectionResult result) {
     if (result == TJConnectionResult.connected) {
-      TapJoyPlugin.shared.addPlacement(_offerwallPlacement);
+      TapJoyPlugin.shared.addPlacement(_videoPlacement);
     }
   }
 
@@ -45,7 +45,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
   void initState() {
     super.initState();
     TapJoyPlugin.shared.connect(
-      androidApiKey: "6cc70fe9-d681-4cda-b98f-70b3ed33fb0f",
+      androidApiKey: "566ba358-f349-4175-968a-e3bdc9f2f7c2", // Provided by user
       iOSApiKey: "",
       debug: false,
     );
@@ -73,17 +73,23 @@ class _WebViewScreenState extends State<WebViewScreen> {
         ),
       )
       ..addJavaScriptChannel(
-        'TapjoyBridge',
+        'AdsBridge',
         onMessageReceived: (JavaScriptMessage message) {
-          if (message.message == 'showOfferwall') {
-            _offerwallPlacement.requestContent();
-            _offerwallPlacement.setHandler((
+          if (message.message == 'showRewardedVideo') {
+            _videoPlacement.requestContent();
+            _videoPlacement.setHandler((
               dynamic placement,
               dynamic handlerName,
               dynamic error,
             ) {
               if (handlerName == 'contentIsReady') {
-                _offerwallPlacement.showPlacement();
+                _videoPlacement.showPlacement();
+              } else if (handlerName == 'rewardRequest' ||
+                  handlerName == 'contentDidDisappear') {
+                // Video closed or reward requested. We trigger the reward in the web app
+                controller.runJavaScript(
+                  "if (window.onVideoRewarded) window.onVideoRewarded();",
+                );
               }
             });
           }
