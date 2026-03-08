@@ -1,8 +1,11 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:flutter_tapjoy/flutter_tapjoy.dart';
+import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -33,23 +36,23 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController controller;
   bool _isLoading = true;
-  final TJPlacement _videoPlacement = TJPlacement(name: "RewardedVideo");
 
-  void _connectionResultHandler(TJConnectionResult result) {
-    if (result == TJConnectionResult.connected) {
-      TapJoyPlugin.shared.addPlacement(_videoPlacement);
-    }
-  }
+  // Game IDs from Unity Ads dashboard
+  final String _androidGameId = '6055807';
+  final String _iosGameId = '6055806';
+
+  // Ad Unit IDs
+  final String _rewardedAdUnitId = 'Rewarded_Android';
+  final String _rewardedIosAdUnitId = 'Rewarded_iOS';
+
+  String get gameId => !kIsWeb && Platform.isIOS ? _iosGameId : _androidGameId;
+  String get rewardedAdUnitId =>
+      !kIsWeb && Platform.isIOS ? _rewardedIosAdUnitId : _rewardedAdUnitId;
 
   @override
   void initState() {
     super.initState();
-    TapJoyPlugin.shared.connect(
-      androidApiKey: "566ba358-f349-4175-968a-e3bdc9f2f7c2", // Provided by user
-      iOSApiKey: "",
-      debug: false,
-    );
-    TapJoyPlugin.shared.setConnectionResultHandler(_connectionResultHandler);
+    _initUnityAds();
 
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -76,29 +79,86 @@ class _WebViewScreenState extends State<WebViewScreen> {
         'AdsBridge',
         onMessageReceived: (JavaScriptMessage message) {
           if (message.message == 'showRewardedVideo') {
-            _videoPlacement.requestContent();
-            _videoPlacement.setHandler((
-              dynamic placement,
-              dynamic handlerName,
-              dynamic error,
-            ) {
-              if (handlerName == 'contentIsReady') {
-                _videoPlacement.showPlacement();
-              } else if (handlerName == 'rewardRequest' ||
-                  handlerName == 'contentDidDisappear') {
-                // Video closed or reward requested. We trigger the reward in the web app
-                controller.runJavaScript(
-                  "if (window.onVideoRewarded) window.onVideoRewarded();",
-                );
-              }
-            });
+            _showRewardedAd();
           }
         },
       )
-      // IMPORTANT: Replace this with your computer's IP address for local testing (e.g., http://192.168.1.X:3000)
-      // OR use the hosted URL once deployed.
-      // For Android Emulator, 10.0.2.2 usually maps to localhost.
-      ..loadRequest(Uri.parse('https://hid-wheat.vercel.app/'));
+      ..loadRequest(
+        Uri.parse('http://10.0.2.2:3001/auth/login'),
+      ); // Using local deployment to test
+  }
+
+  void _initUnityAds() {
+    UnityAds.init(
+      gameId: gameId,
+      testMode: false,
+      onComplete: () {
+        debugPrint('Unity Ads Initialization Complete');
+        _loadRewardedAd();
+      },
+      onFailed: (error, message) {
+        debugPrint('Unity Ads Initialization Failed: $error $message');
+      },
+    );
+  }
+
+  void _loadRewardedAd() {
+    UnityAds.load(
+      placementId: rewardedAdUnitId,
+      onComplete: (placementId) {
+        debugPrint('Unity Rewarded Ad loaded successfully: $placementId');
+      },
+      onFailed: (placementId, error, message) {
+        debugPrint(
+          'Unity Rewarded Ad failed to load: $placementId $error $message',
+        );
+      },
+    );
+  }
+
+  void _showRewardedAd() {
+    UnityAds.showVideoAd(
+      placementId: rewardedAdUnitId,
+      onStart: (placementId) => debugPrint('Video Ad $placementId started'),
+      onClick: (placementId) => debugPrint('Video Ad $placementId click'),
+      onSkipped: (placementId) {
+        debugPrint('Video Ad $placementId skipped');
+        // Tell UI ad was skipped
+        controller.runJavaScript("""
+          if (document.getElementById('watch-ad-btn')) {
+            document.getElementById('watch-ad-btn').disabled = false;
+            document.getElementById('watch-ad-btn').innerHTML = '<i class="fas fa-play-circle"></i> مشاهدة إعلان';
+          }
+          if (document.getElementById('ad-msg')) {
+            document.getElementById('ad-msg').textContent = 'لم تكتمل مشاهدة الإعلان.';
+            document.getElementById('ad-msg').style.color = '#ff4d4d';
+          }
+        """);
+        _loadRewardedAd(); // Load next
+      },
+      onComplete: (placementId) {
+        debugPrint('Video Ad $placementId completed');
+        // Reward user
+        controller.runJavaScript(
+          "if (window.onVideoRewarded) window.onVideoRewarded();",
+        );
+        _loadRewardedAd(); // Load next
+      },
+      onFailed: (placementId, error, message) {
+        debugPrint('Video Ad $placementId failed: $error $message');
+        controller.runJavaScript("""
+          if (document.getElementById('watch-ad-btn')) {
+            document.getElementById('watch-ad-btn').disabled = false;
+            document.getElementById('watch-ad-btn').innerHTML = '<i class="fas fa-play-circle"></i> مشاهدة إعلان';
+          }
+          if (document.getElementById('ad-msg')) {
+            document.getElementById('ad-msg').textContent = 'تعذر عرض الإعلان: $message';
+            document.getElementById('ad-msg').style.color = '#ff4d4d';
+          }
+        """);
+        _loadRewardedAd(); // Attempt to reload
+      },
+    );
   }
 
   @override
